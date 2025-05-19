@@ -22,13 +22,14 @@ app.use((req, res, next) => {
 
 app.use(cors());
 
-// Health check endpoint - Move this before the scraping endpoint
+// Health check endpoint
 app.get('/health', (req, res) => {
   console.log('Health check requested');
   res.status(200).json({ 
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
   });
 });
 
@@ -46,8 +47,13 @@ app.get('/scrape-new-games', async (req, res) => {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--window-size=1920x1080'
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
+        '--window-size=1280,720'
       ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
       timeout: 30000
     });
 
@@ -55,11 +61,12 @@ app.get('/scrape-new-games', async (req, res) => {
     const page = await browser.newPage();
     
     // Set a longer timeout for navigation
-    page.setDefaultNavigationTimeout(60000);
+    page.setDefaultNavigationTimeout(90000);
     
-    // Set viewport to a larger size
-    await page.setViewport({ width: 1920, height: 1080 });
+    // Set viewport to a smaller size for better performance
+    await page.setViewport({ width: 1280, height: 720 });
 
+    // Set a more reliable user agent
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
@@ -68,34 +75,43 @@ app.get('/scrape-new-games', async (req, res) => {
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const resourceType = request.resourceType();
-      if (resourceType === 'image' || resourceType === 'stylesheet' || resourceType === 'font') {
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
         request.abort();
       } else {
         request.continue();
       }
     });
 
+    // Add error event listener
+    page.on('error', err => {
+      console.error('Page error:', err);
+    });
+
+    page.on('pageerror', err => {
+      console.error('Page error:', err);
+    });
+
     console.log('Navigating to Play Store...');
     await page.goto('https://play.google.com/store/games?device=phone', {
-      waitUntil: 'networkidle0',
-      timeout: 60000
+      waitUntil: 'domcontentloaded',
+      timeout: 90000
     });
 
     console.log('Waiting for initial load...');
-    await new Promise(res => setTimeout(res, 2000));
+    await new Promise(res => setTimeout(res, 3000));
 
-    const maxScrolls = 30;
+    const maxScrolls = 20; // Reduced number of scrolls
     let lastClickTime = 0;
     let allHeadings = new Set();
 
     console.log('Starting scroll process...');
     for (let i = 0; i < maxScrolls; i++) {
       console.log(`Scroll ${i + 1}/${maxScrolls}`);
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.5));
-      await new Promise(res => setTimeout(res, 500));
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await new Promise(res => setTimeout(res, 1000));
 
       const currentTime = Date.now();
-      if (currentTime - lastClickTime > 2000) {
+      if (currentTime - lastClickTime > 3000) {
         const wasClicked = await page.evaluate(() => {
           const possibleButtons = [
             ...document.querySelectorAll('button'),
@@ -118,7 +134,7 @@ app.get('/scrape-new-games', async (req, res) => {
         if (wasClicked) {
           console.log('Clicked "Show more" button');
           lastClickTime = currentTime;
-          await new Promise(res => setTimeout(res, 2000));
+          await new Promise(res => setTimeout(res, 3000));
         }
       }
 
