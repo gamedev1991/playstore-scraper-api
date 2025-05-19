@@ -154,11 +154,36 @@ app.get('/scrape-new-games', async (req, res) => {
       const sections = [...document.querySelectorAll('section')];
       let newlyLaunchedSection = null;
 
+      // First try exact match
       for (const section of sections) {
         const heading = section.querySelector('div.kcen6d span')?.textContent?.toLowerCase() || '';
-        if (heading.includes('newly') && heading.includes('launch')) {
+        if (heading === 'newly-launched games') {
           newlyLaunchedSection = section;
           break;
+        }
+      }
+
+      // If not found, try partial match
+      if (!newlyLaunchedSection) {
+        for (const section of sections) {
+          const heading = section.querySelector('div.kcen6d span')?.textContent?.toLowerCase() || '';
+          if (heading.includes('newly') || heading.includes('launch') || heading.includes('new')) {
+            newlyLaunchedSection = section;
+            break;
+          }
+        }
+      }
+
+      // If still not found, try finding by position (usually near the top)
+      if (!newlyLaunchedSection && sections.length > 0) {
+        // Look at the first few sections
+        for (let i = 0; i < Math.min(5, sections.length); i++) {
+          const section = sections[i];
+          const heading = section.querySelector('div.kcen6d span')?.textContent?.toLowerCase() || '';
+          if (heading.includes('game') || heading.includes('play')) {
+            newlyLaunchedSection = section;
+            break;
+          }
         }
       }
 
