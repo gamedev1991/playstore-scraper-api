@@ -100,7 +100,7 @@ app.get('/scrape-new-games', async (req, res) => {
     console.log('Waiting for initial load...');
     await new Promise(res => setTimeout(res, 3000));
 
-    const maxScrolls = 20; // Reduced number of scrolls
+    const maxScrolls = 30; // Reduced number of scrolls
     let lastClickTime = 0;
     let allHeadings = new Set();
 
